@@ -1,0 +1,2303 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>运动世界账号管理系统</title>
+    <!-- 引入Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 引入Font Awesome -->
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+
+    <!-- 配置Tailwind自定义颜色和字体 -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#2563EB',
+                        secondary: '#10B981',
+                        accent: '#8B5CF6',
+                        admin: '#D946EF',
+                        neutral: '#64748B',
+                        excel: {
+                            header: '#F2F2F2',
+                            odd: '#FFFFFF',
+                            even: '#F9F9F9',
+                            active: '#E8F4FD',
+                            border: '#D4D4D4'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+
+    <!-- 自定义工具类 -->
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .content-auto {
+                content-visibility: auto;
+            }
+            .cell-selected {
+                @apply ring-2 ring-primary ring-offset-1;
+            }
+            .excel-shadow {
+                box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+            }
+            .save-indicator {
+                @apply inline-block w-2 h-2 rounded-full ml-2;
+            }
+            .admin-shadow {
+                box-shadow: 0 2px 10px rgba(217, 70, 239, 0.2);
+            }
+            .auth-card {
+                @apply bg-white rounded-xl shadow-lg overflow-hidden max-w-md w-full mx-auto;
+            }
+            .qr-zoom-container {
+                @apply fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 opacity-0 pointer-events-none transition-opacity duration-300;
+            }
+            .qr-zoom-content {
+                @apply bg-white rounded-lg p-6 max-w-lg w-full transform scale-95 transition-transform duration-300;
+            }
+            .qr-zoom-visible {
+                @apply opacity-100 pointer-events-auto;
+            }
+            .qr-zoom-visible .qr-zoom-content {
+                @apply scale-100;
+            }
+            .countdown-timer {
+                @apply text-red-600 font-medium;
+            }
+            .btn-disabled {
+                @apply opacity-50 cursor-not-allowed pointer-events-none;
+            }
+            .screenshot-upload-area {
+                @apply border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-primary transition-colors cursor-pointer bg-gray-50;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 font-sans text-gray-800 min-h-screen flex flex-col">
+    <!-- 导航栏 -->
+    <header class="bg-white shadow-md sticky top-0 z-50 transition-all duration-300 hidden" id="navbar">
+        <div class="container mx-auto px-4 py-3 flex justify-between items-center">
+            <div class="flex items-center space-x-2">
+                <i class="fa fa-running text-primary text-2xl"></i>
+                <h1 class="text-xl md:text-2xl font-bold text-gray-800">运动世界账号管理</h1>
+                <span id="adminBadge" class="hidden bg-admin/10 text-admin text-xs px-2 py-0.5 rounded-full ml-2">
+                    主账户
+                </span>
+            </div>
+
+            <div class="flex items-center space-x-1 md:space-x-4">
+                <!-- 当前用户信息 -->
+                <div class="flex items-center space-x-2 mr-4">
+                    <span class="text-sm text-gray-600">登录用户:</span>
+                    <span id="currentUserDisplay" class="bg-primary/10 text-primary px-2 py-0.5 rounded text-sm font-medium">
+                        --
+                    </span>
+                </div>
+
+                <!-- 导航链接 - 主账户有额外管理链接 -->
+                <nav class="hidden md:flex items-center space-x-1">
+                    <a href="#spreadsheet-page" class="nav-link px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-100 transition-all active" data-page="spreadsheet-page">
+                        <i class="fa fa-table mr-1"></i>账号信息
+                    </a>
+                    <a href="#payment-settings-page" class="nav-link px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-100 transition-all hidden" data-page="payment-settings-page" id="paymentSettingsLink">
+                        <i class="fa fa-qrcode mr-1"></i>收款码设置
+                    </a>
+                    <a href="#summary-page" class="nav-link px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-100 transition-all hidden" data-page="summary-page" id="summaryLink">
+                        <i class="fa fa-bar-chart mr-1"></i>数据汇总
+                    </a>
+                    <a href="#user-management-page" class="nav-link px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-100 transition-all hidden" data-page="user-management-page" id="userManagementLink">
+                        <i class="fa fa-users mr-1"></i>用户管理
+                    </a>
+                </nav>
+
+                <!-- 退出登录按钮 -->
+                <button id="logoutBtn" class="flex items-center px-3 py-1.5 bg-gray-200 text-gray-700 rounded-md text-sm hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-400 transition-all">
+                    <i class="fa fa-sign-out mr-1.5"></i>退出
+                </button>
+
+                <!-- 移动端菜单按钮 -->
+                <button id="mobileMenuBtn" class="md:hidden p-2 rounded-md text-gray-600 hover:bg-gray-100 focus:outline-none ml-2">
+                    <i class="fa fa-bars"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- 移动端菜单 -->
+        <div id="mobileMenu" class="hidden md:hidden bg-white border-t border-gray-200">
+            <div class="container mx-auto px-4 py-2">
+                <a href="#spreadsheet-page" class="mobile-nav-link block px-3 py-2 rounded-md text-base font-medium hover:bg-gray-100 transition-all active" data-page="spreadsheet-page">
+                    <i class="fa fa-table mr-2"></i>账号信息
+                </a>
+                <a href="#payment-settings-page" class="mobile-nav-link block px-3 py-2 rounded-md text-base font-medium hover:bg-gray-100 transition-all hidden" data-page="payment-settings-page" id="mobilePaymentSettingsLink">
+                    <i class="fa fa-qrcode mr-2"></i>收款码设置
+                </a>
+                <a href="#summary-page" class="mobile-nav-link block px-3 py-2 rounded-md text-base font-medium hover:bg-gray-100 transition-all hidden" data-page="summary-page" id="mobileSummaryLink">
+                    <i class="fa fa-bar-chart mr-2"></i>数据汇总
+                </a>
+                <a href="#user-management-page" class="mobile-nav-link block px-3 py-2 rounded-md text-base font-medium hover:bg-gray-100 transition-all hidden" data-page="user-management-page" id="mobileUserManagementLink">
+                    <i class="fa fa-users mr-2"></i>用户管理
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <!-- 主内容区 -->
+    <main class="flex-grow container mx-auto px-4 py-6">
+        <!-- 登录页面 -->
+        <section id="login-page" class="page-content flex items-center justify-center min-h-[70vh]">
+            <div class="auth-card">
+                <div class="p-6 border-b border-gray-100 bg-gradient-to-r from-primary/5 to-primary/10">
+                    <h2 class="text-xl font-bold text-center text-gray-800">运动世界账号管理系统</h2>
+                    <p class="text-center text-gray-500 text-sm mt-1">请登录或注册账号</p>
+                </div>
+                <div class="p-6">
+                    <div class="mb-4">
+                        <label for="loginPhone" class="block text-sm font-medium text-gray-700 mb-1">手机号</label>
+                        <div class="relative">
+                            <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-500">
+                                <i class="fa fa-phone"></i>
+                            </span>
+                            <input type="tel" id="loginPhone" placeholder="请输入手机号" maxlength="11"
+                                class="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all">
+                        </div>
+                    </div>
+
+                    <div class="mb-6">
+                        <div class="flex justify-between mb-1">
+                            <label for="loginPassword" class="block text-sm font-medium text-gray-700">密码</label>
+                        </div>
+                        <div class="relative">
+                            <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-500">
+                                <i class="fa fa-lock"></i>
+                            </span>
+                            <input type="password" id="loginPassword" placeholder="请输入密码"
+                                class="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all">
+                        </div>
+                    </div>
+
+                    <button id="loginBtn" class="w-full bg-primary text-white py-2 px-4 rounded-md font-medium hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all mb-3">
+                        登录
+                    </button>
+
+                    <div class="text-center text-sm text-gray-600">
+                        还没有账号? <button id="showRegisterBtn" class="text-primary hover:underline">立即注册</button>
+                    </div>
+
+                    <div class="mt-4 pt-4 border-t border-gray-100">
+                        <button id="showAdminLoginBtn" class="w-full text-gray-600 py-2 px-4 rounded-md font-medium hover:bg-gray-100 focus:outline-none transition-all text-sm">
+                            <i class="fa fa-shield mr-1"></i>主账户登录入口
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 注册页面 -->
+        <section id="register-page" class="page-content hidden flex items-center justify-center min-h-[70vh]">
+            <div class="auth-card">
+                <div class="p-6 border-b border-gray-100 bg-gradient-to-r from-primary/5 to-primary/10">
+                    <h2 class="text-xl font-bold text-center text-gray-800">账号注册</h2>
+                    <p class="text-center text-gray-500 text-sm mt-1">创建您的专属账号</p>
+                </div>
+                <div class="p-6">
+                    <div class="mb-4">
+                        <label for="registerPhone" class="block text-sm font-medium text-gray-700 mb-1">手机号</label>
+                        <div class="relative">
+                            <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-500">
+                                <i class="fa fa-phone"></i>
+                            </span>
+                            <input type="tel" id="registerPhone" placeholder="请输入手机号" maxlength="11"
+                                class="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all">
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+                        <label for="registerPassword" class="block text-sm font-medium text-gray-700 mb-1">设置密码</label>
+                        <div class="relative">
+                            <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-500">
+                                <i class="fa fa-lock"></i>
+                            </span>
+                            <input type="password" id="registerPassword" placeholder="请设置密码（至少6位）"
+                                class="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all">
+                        </div>
+                    </div>
+
+                    <div class="mb-6">
+                        <label for="confirmPassword" class="block text-sm font-medium text-gray-700 mb-1">确认密码</label>
+                        <div class="relative">
+                            <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-500">
+                                <i class="fa fa-check-circle"></i>
+                            </span>
+                            <input type="password" id="confirmPassword" placeholder="请再次输入密码"
+                                class="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all">
+                        </div>
+                    </div>
+
+                    <button id="registerBtn" class="w-full bg-secondary text-white py-2 px-4 rounded-md font-medium hover:bg-secondary/90 focus:outline-none focus:ring-2 focus:ring-secondary/50 transition-all mb-3">
+                        注册账号
+                    </button>
+
+                    <div class="text-center text-sm text-gray-600">
+                        已有账号? <button id="showLoginBtn" class="text-primary hover:underline">返回登录</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 主账户登录页面 -->
+        <section id="admin-login-page" class="page-content hidden flex items-center justify-center min-h-[70vh]">
+            <div class="auth-card">
+                <div class="p-6 border-b border-gray-100 bg-gradient-to-r from-admin/5 to-admin/10">
+                    <h2 class="text-xl font-bold text-center text-gray-800">主账户登录</h2>
+                    <p class="text-center text-gray-500 text-sm mt-1">请输入管理员账号密码</p>
+                </div>
+                <div class="p-6">
+                    <div class="mb-4">
+                        <label for="adminUsername" class="block text-sm font-medium text-gray-700 mb-1">管理员账号</label>
+                        <div class="relative">
+                            <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-500">
+                                <i class="fa fa-user-circle"></i>
+                            </span>
+                            <input type="text" id="adminUsername" placeholder="请输入管理员账号"
+                                class="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-admin/50 transition-all">
+                        </div>
+                    </div>
+
+                    <div class="mb-6">
+                        <label for="adminPassword" class="block text-sm font-medium text-gray-700 mb-1">管理员密码</label>
+                        <div class="relative">
+                            <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-500">
+                                <i class="fa fa-lock"></i>
+                            </span>
+                            <input type="password" id="adminPassword" placeholder="请输入管理员密码"
+                                class="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-admin/50 transition-all">
+                        </div>
+                    </div>
+
+                    <button id="adminLoginBtn" class="w-full bg-admin text-white py-2 px-4 rounded-md font-medium hover:bg-admin/90 focus:outline-none focus:ring-2 focus:ring-admin/50 transition-all mb-3">
+                        登录主账户
+                    </button>
+
+                    <div class="text-center text-sm text-gray-600">
+                        返回用户登录? <button id="backToUserLoginBtn" class="text-primary hover:underline">用户登录</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 账号信息表格页面 -->
+        <section id="spreadsheet-page" class="page-content hidden">
+            <div class="max-w-6xl mx-auto">
+                <div class="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                    <div>
+                        <h2 class="text-2xl font-bold text-gray-800 flex items-center">
+                            <i class="fa fa-table text-primary mr-2"></i>账号信息表格
+                        </h2>
+                        <p class="text-gray-600 mt-1">请填写运动世界账号信息，系统将自动计算费用</p>
+                    </div>
+
+                    <div class="flex flex-wrap items-center gap-2">
+                        <div class="flex gap-2">
+                            <button id="addRowBtn" class="flex items-center px-3 py-1.5 bg-secondary text-white rounded-md text-sm hover:bg-secondary/90 focus:outline-none focus:ring-2 focus:ring-secondary/50 transition-all">
+                                <i class="fa fa-plus mr-1.5"></i>添加记录
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 表格容器 -->
+                <div class="overflow-auto excel-shadow bg-white rounded-lg border border-excel-border">
+                    <table id="spreadsheet" class="min-w-full border-collapse">
+                        <thead>
+                            <tr>
+                                <th class="excel-header w-10 h-8 border border-excel-border bg-excel-header font-medium text-gray-600 text-center">
+                                    #
+                                </th>
+                                <th class="excel-header border border-excel-border bg-excel-header font-medium text-gray-600 px-3 py-2 min-w-[180px]">
+                                    运动世界账号
+                                </th>
+                                <th class="excel-header border border-excel-border bg-excel-header font-medium text-gray-600 px-3 py-2 min-w-[150px]">
+                                    密码
+                                </th>
+                                <th class="excel-header border border-excel-border bg-excel-header font-medium text-gray-600 px-3 py-2 min-w-[120px]">
+                                    公里数
+                                </th>
+                                <th class="excel-header border border-excel-border bg-excel-header font-medium text-gray-600 px-3 py-2 min-w-[120px]">
+                                    价格(元)
+                                </th>
+                                <th class="excel-header border border-excel-border bg-excel-header font-medium text-gray-600 px-3 py-2 min-w-[180px]">
+                                    支付状态
+                                </th>
+                                <th class="excel-header border border-excel-border bg-excel-header font-medium text-gray-600 px-3 py-2 min-w-[120px]">
+                                    操作
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody id="spreadsheetBody">
+                            <!-- 表格内容将通过JavaScript动态生成 -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- 表格信息栏 -->
+                <div class="mt-3 flex justify-between items-center text-sm text-gray-600">
+                    <div>
+                        <span>价格计算规则: 1公里 = <span id="pricePerKmDisplay">0.85</span>元</span>
+                    </div>
+                    <div>
+                        <span id="tableStatus">上次更新: 从未</span>
+                        <span id="autoSaveIndicator" class="save-indicator bg-gray-300"></span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 数据汇总页面 - 主账户专用 -->
+        <section id="summary-page" class="page-content hidden">
+            <div class="max-w-6xl mx-auto">
+                <div class="mb-6">
+                    <h2 class="text-2xl font-bold text-gray-800 flex items-center">
+                        <i class="fa fa-bar-chart text-admin mr-2"></i>所有用户数据汇总
+                    </h2>
+                    <p class="text-gray-600 mt-1">查看和管理所有用户提交的付款信息</p>
+                </div>
+
+                <!-- 统计信息卡片 -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    <div class="bg-white rounded-lg p-4 shadow-md border border-gray-100">
+                        <h3 class="text-gray-500 text-sm font-medium">总用户数</h3>
+                        <p class="text-2xl font-bold text-gray-800 mt-1" id="totalUsers">0</p>
+                    </div>
+                    <div class="bg-white rounded-lg p-4 shadow-md border border-gray-100">
+                        <h3 class="text-gray-500 text-sm font-medium">总记录数</h3>
+                        <p class="text-2xl font-bold text-gray-800 mt-1" id="totalRecords">0</p>
+                    </div>
+                    <div class="bg-white rounded-lg p-4 shadow-md border border-gray-100">
+                        <h3 class="text-gray-500 text-sm font-medium">已确认金额(元)</h3>
+                        <p class="text-2xl font-bold text-gray-800 mt-1" id="totalAmount">0.00</p>
+                    </div>
+                </div>
+
+                <!-- 汇总表格容器 -->
+                <div class="overflow-auto admin-shadow bg-white rounded-lg border border-excel-border">
+                    <table id="summaryTable" class="min-w-full border-collapse">
+                        <thead>
+                            <tr>
+                                <th class="excel-header w-10 h-8 border border-excel-border bg-excel-header font-medium text-gray-600 text-center">
+                                    #
+                                </th>
+                                <th class="excel-header border border-excel-border bg-excel-header font-medium text-gray-600 px-3 py-2 min-w-[120px]">
+                                    用户(手机号)
+                                </th>
+                                <th class="excel-header border border-excel-border bg-excel-header font-medium text-gray-600 px-3 py-2 min-w-[180px]">
+                                    运动世界账号
+                                </th>
+                                <th class="excel-header border border-excel-border bg-excel-header font-medium text-gray-600 px-3 py-2 min-w-[150px]">
+                                    密码
+                                </th>
+                                <th class="excel-header border border-excel-border bg-excel-header font-medium text-gray-600 px-3 py-2 min-w-[120px]">
+                                    公里数
+                                </th>
+                                <th class="excel-header border border-excel-border bg-excel-header font-medium text-gray-600 px-3 py-2 min-w-[120px]">
+                                    价格(元)
+                                </th>
+                                <th class="excel-header border border-excel-border bg-excel-header font-medium text-gray-600 px-3 py-2 min-w-[160px]">
+                                    提交时间
+                                </th>
+                                <th class="excel-header border border-excel-border bg-excel-header font-medium text-gray-600 px-3 py-2 min-w-[120px]">
+                                    支付凭证
+                                </th>
+                                <th class="excel-header border border-excel-border bg-excel-header font-medium text-gray-600 px-3 py-2 min-w-[120px]">
+                                    状态
+                                </th>
+                                <th class="excel-header border border-excel-border bg-excel-header font-medium text-gray-600 px-3 py-2 min-w-[120px]">
+                                    操作
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody id="summaryTableBody">
+                            <!-- 汇总表格内容将通过JavaScript动态生成 -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- 用户管理页面 - 主账户专用 -->
+        <section id="user-management-page" class="page-content hidden">
+            <div class="max-w-4xl mx-auto">
+                <div class="mb-6">
+                    <h2 class="text-2xl font-bold text-gray-800 flex items-center">
+                        <i class="fa fa-users text-admin mr-2"></i>用户管理
+                    </h2>
+                    <p class="text-gray-600 mt-1">查看所有注册用户信息</p>
+                </div>
+
+                <!-- 用户表格容器 -->
+                <div class="overflow-auto admin-shadow bg-white rounded-lg border border-excel-border">
+                    <table id="userManagementTable" class="min-w-full border-collapse">
+                        <thead>
+                            <tr>
+                                <th class="excel-header w-10 h-8 border border-excel-border bg-excel-header font-medium text-gray-600 text-center">
+                                    #
+                                </th>
+                                <th class="excel-header border border-excel-border bg-excel-header font-medium text-gray-600 px-3 py-2 min-w-[150px]">
+                                    手机号
+                                </th>
+                                <th class="excel-header border border-excel-border bg-excel-header font-medium text-gray-600 px-3 py-2 min-w-[150px]">
+                                    注册时间
+                                </th>
+                                <th class="excel-header border border-excel-border bg-excel-header font-medium text-gray-600 px-3 py-2 min-w-[120px]">
+                                    记录数
+                                </th>
+                                <th class="excel-header border border-excel-border bg-excel-header font-medium text-gray-600 px-3 py-2 min-w-[120px]">
+                                    操作
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody id="userManagementTableBody">
+                            <!-- 用户表格内容将通过JavaScript动态生成 -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- 收款码设置页面 - 主账户专用 -->
+        <section id="payment-settings-page" class="page-content hidden">
+            <div class="max-w-2xl mx-auto">
+                <div class="mb-6">
+                    <h2 class="text-2xl font-bold text-gray-800 flex items-center">
+                        <i class="fa fa-qrcode text-admin mr-2"></i>收款码设置
+                    </h2>
+                    <p class="text-gray-600 mt-1">上传或更新收款码，所有用户将看到这些收款码</p>
+                </div>
+
+                <!-- 付款码卡片容器 -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                    <!-- 微信支付 -->
+                    <div class="bg-white rounded-xl shadow-lg overflow-hidden admin-shadow transition-all hover:shadow-xl">
+                        <div class="bg-green-50 px-6 py-3 border-b border-green-100">
+                            <h3 class="font-semibold text-green-700 flex items-center">
+                                <i class="fa fa-weixin text-green-600 mr-2 text-xl"></i>
+                                微信支付
+                            </h3>
+                        </div>
+                        <div class="p-6 flex flex-col items-center">
+                            <!-- 隐藏的文件输入 -->
+                            <input type="file" id="wechatQrInput" accept="image/*" class="hidden">
+
+                            <!-- 二维码显示区域 -->
+                            <div id="wechatQrContainer" class="bg-white p-3 border-2 border-gray-200 rounded-lg mb-4 shadow-sm upload-hover w-64 h-64 flex items-center justify-center cursor-pointer">
+                                <img id="wechatQrCode" src="https://picsum.photos/seed/wechatpay/300/300" alt="微信支付二维码" class="w-full h-full object-contain">
+                            </div>
+
+                            <!-- 上传按钮 -->
+                            <button id="wechatUploadBtn" class="px-4 py-1.5 bg-green-100 text-green-700 rounded-md text-sm hover:bg-green-200 focus:outline-none focus:ring-2 focus:ring-green-300 transition-all">
+                                <i class="fa fa-upload mr-1.5"></i>上传微信收款码
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 支付宝 -->
+                    <div class="bg-white rounded-xl shadow-lg overflow-hidden admin-shadow transition-all hover:shadow-xl">
+                        <div class="bg-blue-50 px-6 py-3 border-b border-blue-100">
+                            <h3 class="font-semibold text-blue-700 flex items-center">
+                                <i class="fa fa-credit-card text-blue-500 mr-2 text-xl"></i>
+                                支付宝
+                            </h3>
+                        </div>
+                        <div class="p-6 flex flex-col items-center">
+                            <!-- 隐藏的文件输入 -->
+                            <input type="file" id="alipayQrInput" accept="image/*" class="hidden">
+
+                            <!-- 二维码显示区域 -->
+                            <div id="alipayQrContainer" class="bg-white p-3 border-2 border-gray-200 rounded-lg mb-4 shadow-sm upload-hover w-64 h-64 flex items-center justify-center cursor-pointer">
+                                <img id="alipayQrCode" src="https://picsum.photos/seed/alipay/300/300" alt="支付宝二维码" class="w-full h-full object-contain">
+                            </div>
+
+                            <!-- 上传按钮 -->
+                            <button id="alipayUploadBtn" class="px-4 py-1.5 bg-blue-100 text-blue-700 rounded-md text-sm hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-300 transition-all">
+                                <i class="fa fa-upload mr-1.5"></i>上传支付宝收款码
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 价格设置 -->
+                <div class="bg-white rounded-xl shadow p-5 border border-gray-100 mb-6">
+                    <h3 class="font-semibold text-gray-800 mb-3 flex items-center">
+                        <i class="fa fa-calculator text-primary mr-2"></i>
+                        价格设置
+                    </h3>
+                    <div class="flex items-center">
+                        <label for="pricePerKm" class="text-sm text-gray-600 mr-3">每公里价格 (元):</label>
+                        <input type="number" id="pricePerKm" step="0.01" min="0.01" class="border border-gray-300 rounded-md px-3 py-2 text-sm w-24 focus:outline-none focus:ring-2 focus:ring-primary/50">
+                        <button id="savePriceBtn" class="ml-3 px-3 py-1.5 bg-primary text-white rounded-md text-sm hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all">
+                            <i class="fa fa-save mr-1.5"></i>保存
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 付款页面 (用户填写后跳转) -->
+        <section id="payment-page" class="page-content hidden">
+            <div class="max-w-2xl mx-auto">
+                <div class="mb-6">
+                    <h2 class="text-2xl font-bold text-gray-800 flex items-center">
+                        <i class="fa fa-qrcode text-accent mr-2"></i>支付费用
+                    </h2>
+                    <p class="text-gray-600 mt-1" id="paymentAmount">请支付: ¥0.00</p>
+                    <p class="text-sm text-red-600 mt-1">
+                        <i class="fa fa-clock-o mr-1"></i>
+                        请在 <span id="paymentTimer" class="countdown-timer">2:00</span> 内完成支付并上传凭证，超时将自动取消
+                    </p>
+                </div>
+
+                <!-- 付款码卡片容器 -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                    <!-- 微信支付 -->
+                    <div class="bg-white rounded-xl shadow-lg overflow-hidden excel-shadow transition-all hover:shadow-xl">
+                        <div class="bg-green-50 px-6 py-3 border-b border-green-100">
+                            <h3 class="font-semibold text-green-700 flex items-center">
+                                <i class="fa fa-weixin text-green-600 mr-2 text-xl"></i>
+                                微信支付
+                            </h3>
+                        </div>
+                        <div class="p-6 flex flex-col items-center">
+                            <div class="bg-white p-3 border-2 border-gray-200 rounded-lg mb-4 shadow-sm w-64 h-64 flex items-center justify-center cursor-pointer qr-zoom-trigger" data-qr="wechat">
+                                <img id="paymentWechatQrCode" src="https://picsum.photos/seed/wechatpay/300/300" alt="微信支付二维码" class="w-full h-full object-contain">
+                            </div>
+                            <p class="text-sm text-gray-500 text-center mb-2">
+                                点击二维码可放大查看
+                            </p>
+                            <p class="text-sm text-gray-500 text-center">
+                                微信扫一扫，完成支付
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- 支付宝 -->
+                    <div class="bg-white rounded-xl shadow-lg overflow-hidden excel-shadow transition-all hover:shadow-xl">
+                        <div class="bg-blue-50 px-6 py-3 border-b border-blue-100">
+                            <h3 class="font-semibold text-blue-700 flex items-center">
+                                <i class="fa fa-credit-card text-blue-500 mr-2 text-xl"></i>
+                                支付宝
+                            </h3>
+                        </div>
+                        <div class="p-6 flex flex-col items-center">
+                            <div class="bg-white p-3 border-2 border-gray-200 rounded-lg mb-4 shadow-sm w-64 h-64 flex items-center justify-center cursor-pointer qr-zoom-trigger" data-qr="alipay">
+                                <img id="paymentAlipayQrCode" src="https://picsum.photos/seed/alipay/300/300" alt="支付宝二维码" class="w-full h-full object-contain">
+                            </div>
+                            <p class="text-sm text-gray-500 text-center mb-2">
+                                点击二维码可放大查看
+                            </p>
+                            <p class="text-sm text-gray-500 text-center">
+                                支付宝扫一扫，完成支付
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 付款截图上传区域 -->
+                <div class="bg-white rounded-xl shadow p-5 border border-gray-100 mb-6">
+                    <h3 class="font-semibold text-gray-800 mb-3 flex items-center">
+                        <i class="fa fa-upload text-primary mr-2"></i>
+                        上传付款凭证
+                    </h3>
+                    <p class="text-sm text-gray-600 mb-4">请在完成支付后，上传清晰的付款截图作为凭证</p>
+
+                    <input type="file" id="paymentScreenshotInput" accept="image/*" class="hidden">
+
+                    <div id="screenshotUploadArea" class="screenshot-upload-area">
+                        <i class="fa fa-camera text-4xl text-gray-400 mb-2"></i>
+                        <p class="text-gray-500">点击或拖拽付款截图到此处上传</p>
+                        <p class="text-xs text-gray-400 mt-1">支持 JPG、PNG 格式，大小不超过5MB</p>
+                    </div>
+
+                    <div id="screenshotPreviewContainer" class="mt-4 hidden">
+                        <p class="text-sm text-gray-600 mb-2">已上传的付款凭证：</p>
+                        <div class="relative inline-block border border-gray-200 rounded-lg overflow-hidden">
+                            <img id="screenshotPreview" src="" alt="付款截图预览" class="max-w-full max-h-64">
+                            <button id="removeScreenshotBtn" class="absolute top-2 right-2 bg-white/80 hover:bg-white text-red-500 rounded-full w-6 h-6 flex items-center justify-center transition-all">
+                                <i class="fa fa-times"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex justify-center gap-4">
+                    <button id="confirmPaymentBtn" class="px-6 py-2 bg-green-600 text-white rounded-md text-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 transition-all btn-disabled">
+                        <i class="fa fa-check-circle mr-1.5"></i>已完成付款
+                    </button>
+                    <button id="laterPaymentBtn" class="px-6 py-2 bg-gray-200 text-gray-700 rounded-md text-sm hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-400 transition-all">
+                        <i class="fa fa-clock-o mr-1.5"></i>稍后付款
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- 图片查看器 -->
+        <div id="imageViewer" class="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4 opacity-0 pointer-events-none transition-opacity duration-300">
+            <button id="closeImageViewer" class="absolute top-4 right-4 text-white text-2xl hover:text-gray-300 z-10">
+                <i class="fa fa-times"></i>
+            </button>
+            <img id="imageViewerContent" src="" alt="图片查看" class="max-w-[90%] max-h-[90vh] object-contain">
+        </div>
+
+        <!-- 未付款提示弹窗 -->
+        <div id="paymentErrorModal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 opacity-0 pointer-events-none transition-opacity duration-300">
+            <div class="bg-white rounded-lg p-6 max-w-md w-full transform scale-95 transition-transform duration-300">
+                <div class="text-center">
+                    <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-100 mb-4">
+                        <i class="fa fa-exclamation-triangle text-red-500 text-2xl"></i>
+                    </div>
+                    <h3 class="text-xl font-bold text-gray-800 mb-2">操作提示</h3>
+                    <p class="text-gray-600 mb-6" id="paymentErrorText">请先上传付款截图</p>
+                    <button id="closePaymentErrorBtn" class="px-6 py-2 bg-primary text-white rounded-md text-sm hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all">
+                        我知道了
+                    </button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- 页脚 -->
+    <footer class="bg-gray-800 text-gray-300 py-6 mt-10 hidden" id="footer">
+        <div class="container mx-auto px-4">
+            <div class="flex flex-col md:flex-row justify-between items-center">
+                <div class="mb-4 md:mb-0">
+                    <p class="text-sm">&copy; 2023 运动世界账号管理系统. 保留所有权利.</p>
+                </div>
+                <div class="flex space-x-4">
+                    <a href="#" class="text-gray-400 hover:text-white transition-all">
+                        <i class="fa fa-question-circle"></i> 帮助中心
+                    </a>
+                    <a href="#" class="text-gray-400 hover:text-white transition-all">
+                        <i class="fa fa-shield"></i> 隐私政策
+                    </a>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- 通知提示组件 -->
+    <div id="notification" class="fixed bottom-5 right-5 bg-gray-800 text-white px-4 py-3 rounded-lg shadow-lg transform translate-y-20 opacity-0 transition-all duration-300 flex items-center z-50">
+        <i id="notificationIcon" class="fa fa-info-circle mr-2"></i>
+        <span id="notificationText">通知消息</span>
+    </div>
+
+    <!-- JavaScript -->
+    <script>
+        // 系统配置和状态
+        let currentUser = null; // 当前登录用户
+        let isAdmin = false; // 是否是管理员
+        let currentPaymentAmount = 0; // 当前支付金额
+        let currentPaymentRowId = null; // 当前正在支付的行ID
+        let currentScreenshotData = null; // 当前上传的付款截图
+        let pricePerKm = 0.85; // 每公里价格，可由主账户修改
+        let paymentTimer = null; // 付款计时器
+        const ADMIN_USERNAME = 'admin'; // 管理员账号
+        const ADMIN_PASSWORD = 'admin123'; // 管理员密码，实际应用中应加密存储
+        const PAYMENT_TIMEOUT = 120; // 付款超时时间（秒）
+
+        // DOM 元素
+        const navbar = document.getElementById('navbar');
+        const footer = document.getElementById('footer');
+        const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+        const mobileMenu = document.getElementById('mobileMenu');
+        const navLinks = document.querySelectorAll('.nav-link, .mobile-nav-link');
+        const pageContents = document.querySelectorAll('.page-content');
+        const spreadsheetBody = document.getElementById('spreadsheetBody');
+        const tableStatus = document.getElementById('tableStatus');
+        const autoSaveIndicator = document.getElementById('autoSaveIndicator');
+        const addRowBtn = document.getElementById('addRowBtn');
+        const paymentPage = document.getElementById('payment-page');
+        const spreadsheetPage = document.getElementById('spreadsheet-page');
+        const paymentAmount = document.getElementById('paymentAmount');
+        const confirmPaymentBtn = document.getElementById('confirmPaymentBtn');
+        const laterPaymentBtn = document.getElementById('laterPaymentBtn');
+        const adminBadge = document.getElementById('adminBadge');
+        const currentUserDisplay = document.getElementById('currentUserDisplay');
+        const paymentSettingsLink = document.getElementById('paymentSettingsLink');
+        const summaryLink = document.getElementById('summaryLink');
+        const userManagementLink = document.getElementById('userManagementLink');
+        const mobilePaymentSettingsLink = document.getElementById('mobilePaymentSettingsLink');
+        const mobileSummaryLink = document.getElementById('mobileSummaryLink');
+        const mobileUserManagementLink = document.getElementById('mobileUserManagementLink');
+        const summaryTableBody = document.getElementById('summaryTableBody');
+        const totalUsersElement = document.getElementById('totalUsers');
+        const totalRecordsElement = document.getElementById('totalRecords');
+        const totalAmountElement = document.getElementById('totalAmount');
+        const pricePerKmInput = document.getElementById('pricePerKm');
+        const pricePerKmDisplay = document.getElementById('pricePerKmDisplay');
+        const savePriceBtn = document.getElementById('savePriceBtn');
+        const logoutBtn = document.getElementById('logoutBtn');
+        const notification = document.getElementById('notification');
+        const notificationIcon = document.getElementById('notificationIcon');
+        const notificationText = document.getElementById('notificationText');
+
+        // 付款超时相关元素
+        const paymentTimerElement = document.getElementById('paymentTimer');
+
+        // 未付款提示弹窗
+        const paymentErrorModal = document.getElementById('paymentErrorModal');
+        const closePaymentErrorBtn = document.getElementById('closePaymentErrorBtn');
+        const paymentErrorText = document.getElementById('paymentErrorText');
+
+        // 付款截图上传相关元素
+        const paymentScreenshotInput = document.getElementById('paymentScreenshotInput');
+        const screenshotUploadArea = document.getElementById('screenshotUploadArea');
+        const screenshotPreviewContainer = document.getElementById('screenshotPreviewContainer');
+        const screenshotPreview = document.getElementById('screenshotPreview');
+        const removeScreenshotBtn = document.getElementById('removeScreenshotBtn');
+
+        // 图片查看器
+        const imageViewer = document.getElementById('imageViewer');
+        const imageViewerContent = document.getElementById('imageViewerContent');
+        const closeImageViewer = document.getElementById('closeImageViewer');
+
+        // 二维码放大相关元素
+        const qrZoomTriggers = document.querySelectorAll('.qr-zoom-trigger');
+
+        // 用户管理表格
+        const userManagementTableBody = document.getElementById('userManagementTableBody');
+
+        // 登录注册相关元素
+        const loginPage = document.getElementById('login-page');
+        const registerPage = document.getElementById('register-page');
+        const adminLoginPage = document.getElementById('admin-login-page');
+        const loginPhone = document.getElementById('loginPhone');
+        const loginPassword = document.getElementById('loginPassword');
+        const loginBtn = document.getElementById('loginBtn');
+        const showRegisterBtn = document.getElementById('showRegisterBtn');
+        const showAdminLoginBtn = document.getElementById('showAdminLoginBtn');
+        const registerPhone = document.getElementById('registerPhone');
+        const registerPassword = document.getElementById('registerPassword');
+        const confirmPassword = document.getElementById('confirmPassword');
+        const registerBtn = document.getElementById('registerBtn');
+        const showLoginBtn = document.getElementById('showLoginBtn');
+        const adminUsername = document.getElementById('adminUsername');
+        const adminPassword = document.getElementById('adminPassword');
+        const adminLoginBtn = document.getElementById('adminLoginBtn');
+        const backToUserLoginBtn = document.getElementById('backToUserLoginBtn');
+
+        // 收款码相关元素
+        const wechatQrInput = document.getElementById('wechatQrInput');
+        const wechatQrContainer = document.getElementById('wechatQrContainer');
+        const wechatQrCode = document.getElementById('wechatQrCode');
+        const wechatUploadBtn = document.getElementById('wechatUploadBtn');
+        const alipayQrInput = document.getElementById('alipayQrInput');
+        const alipayQrContainer = document.getElementById('alipayQrContainer');
+        const alipayQrCode = document.getElementById('alipayQrCode');
+        const alipayUploadBtn = document.getElementById('alipayUploadBtn');
+        const paymentWechatQrCode = document.getElementById('paymentWechatQrCode');
+        const paymentAlipayQrCode = document.getElementById('paymentAlipayQrCode');
+
+        // 页面加载时初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            // 检查是否有已登录用户
+            checkLoggedInUser();
+
+            // 初始化事件监听
+            initEventListeners();
+        });
+
+        // 初始化事件监听
+        function initEventListeners() {
+            // 监听滚动事件，改变导航栏样式
+            window.addEventListener('scroll', () => {
+                if (window.scrollY > 10 && navbar.classList.contains('hidden') === false) {
+                    navbar.classList.add('py-2', 'shadow-lg');
+                    navbar.classList.remove('py-3', 'shadow-md');
+                } else if (navbar.classList.contains('hidden') === false) {
+                    navbar.classList.add('py-3', 'shadow-md');
+                    navbar.classList.remove('py-2', 'shadow-lg');
+                }
+            });
+
+            // 移动端菜单切换
+            mobileMenuBtn.addEventListener('click', () => {
+                mobileMenu.classList.toggle('hidden');
+            });
+
+            // 导航链接点击事件
+            navLinks.forEach(link => {
+                link.addEventListener('click', (e) => {
+                    e.preventDefault();
+
+                    // 切换活跃导航状态
+                    navLinks.forEach(l => l.classList.remove('active', 'bg-primary/10', 'text-primary'));
+                    link.classList.add('active', 'bg-primary/10', 'text-primary');
+
+                    // 显示对应的页面内容
+                    const targetPage = link.getAttribute('data-page');
+                    pageContents.forEach(page => {
+                        page.classList.add('hidden');
+                    });
+                    document.getElementById(targetPage).classList.remove('hidden');
+
+                    // 如果切换到汇总页面或用户管理页面，刷新数据
+                    if (targetPage === 'summary-page') {
+                        loadSummaryData();
+                    } else if (targetPage === 'user-management-page') {
+                        loadUserManagementData();
+                    }
+
+                    // 关闭移动端菜单
+                    mobileMenu.classList.add('hidden');
+                });
+            });
+
+            // 添加记录按钮事件
+            addRowBtn.addEventListener('click', addNewRow);
+
+            // 付款确认按钮事件
+            confirmPaymentBtn.addEventListener('click', () => {
+                // 检查是否已上传截图
+                if (!currentScreenshotData) {
+                    paymentErrorText.textContent = '请先上传付款截图作为凭证';
+                    showPaymentErrorModal();
+                    return;
+                }
+
+                // 保存付款截图并标记为待确认
+                if (currentPaymentRowId) {
+                    // 标记为已提交付款凭证
+                    markAsPaymentSubmitted(currentPaymentRowId);
+                    // 清除计时器
+                    clearPaymentTimer();
+                    // 返回表格页面
+                    paymentPage.classList.add('hidden');
+                    spreadsheetPage.classList.remove('hidden');
+                    // 显示成功消息
+                    showNotification('付款凭证已提交，请等待主账户确认', 'success');
+                    // 重置截图数据
+                    resetScreenshotData();
+                }
+            });
+
+            // 稍后付款按钮事件
+            laterPaymentBtn.addEventListener('click', () => {
+                // 清除计时器
+                clearPaymentTimer();
+                // 返回表格页面，但不标记为已支付
+                paymentPage.classList.add('hidden');
+                spreadsheetPage.classList.remove('hidden');
+                // 重置截图数据
+                resetScreenshotData();
+                showNotification('已暂存信息，您可以稍后付款', 'info');
+            });
+
+            // 保存价格设置按钮事件
+            savePriceBtn.addEventListener('click', () => {
+                const newPrice = parseFloat(pricePerKmInput.value);
+                if (!isNaN(newPrice) && newPrice > 0) {
+                    pricePerKm = newPrice;
+                    pricePerKmDisplay.textContent = pricePerKm.toFixed(2);
+                    // 保存到系统设置
+                    saveSystemSettings();
+                    // 更新所有价格计算
+                    updateAllPrices();
+                    // 显示提示
+                    showNotification('每公里价格更新成功！', 'success');
+                } else {
+                    showNotification('请输入有效的价格', 'error');
+                }
+            });
+
+            // 退出登录按钮事件
+            logoutBtn.addEventListener('click', () => {
+                if (confirm('确定要退出登录吗？')) {
+                    logout();
+                }
+            });
+
+            // 初始化付款截图上传功能
+            initScreenshotUpload();
+
+            // 初始化图片查看器
+            initImageViewer();
+
+            // 初始化收款码上传功能
+            initQrCodeUpload();
+
+            // 登录注册相关事件
+            initAuthEvents();
+
+            // 未付款提示弹窗关闭按钮
+            closePaymentErrorBtn.addEventListener('click', () => {
+                paymentErrorModal.classList.remove('opacity-100', 'pointer-events-auto');
+                paymentErrorModal.querySelector('div').classList.remove('scale-100');
+                paymentErrorModal.querySelector('div').classList.add('scale-95');
+            });
+        }
+
+        // 初始化付款截图上传功能
+        function initScreenshotUpload() {
+            // 点击上传区域触发文件选择
+            screenshotUploadArea.addEventListener('click', () => {
+                paymentScreenshotInput.click();
+            });
+
+            // 拖拽功能
+            screenshotUploadArea.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                screenshotUploadArea.classList.add('border-primary', 'bg-primary/5');
+            });
+
+            screenshotUploadArea.addEventListener('dragleave', () => {
+                screenshotUploadArea.classList.remove('border-primary', 'bg-primary/5');
+            });
+
+            screenshotUploadArea.addEventListener('drop', (e) => {
+                e.preventDefault();
+                screenshotUploadArea.classList.remove('border-primary', 'bg-primary/5');
+
+                if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                    handleScreenshotFile(e.dataTransfer.files[0]);
+                }
+            });
+
+            // 文件选择变化事件
+            paymentScreenshotInput.addEventListener('change', (e) => {
+                if (e.target.files && e.target.files[0]) {
+                    handleScreenshotFile(e.target.files[0]);
+                }
+            });
+
+            // 移除截图按钮事件
+            removeScreenshotBtn.addEventListener('click', resetScreenshotData);
+        }
+
+        // 处理上传的截图文件
+        function handleScreenshotFile(file) {
+            // 检查文件类型
+            if (!file.type.match('image.*')) {
+                paymentErrorText.textContent = '请上传图片格式的文件（JPG、PNG）';
+                showPaymentErrorModal();
+                return;
+            }
+
+            // 检查文件大小（5MB以内）
+            if (file.size > 5 * 1024 * 1024) {
+                paymentErrorText.textContent = '图片大小不能超过5MB';
+                showPaymentErrorModal();
+                return;
+            }
+
+            // 读取文件并显示预览
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                currentScreenshotData = e.target.result;
+                screenshotPreview.src = currentScreenshotData;
+                screenshotPreviewContainer.classList.remove('hidden');
+                screenshotUploadArea.classList.add('hidden');
+
+                // 启用"已完成付款"按钮
+                confirmPaymentBtn.classList.remove('btn-disabled');
+
+                showNotification('付款截图上传成功', 'success');
+            };
+
+            reader.readAsDataURL(file);
+        }
+
+        // 重置截图数据
+        function resetScreenshotData() {
+            currentScreenshotData = null;
+            screenshotPreview.src = '';
+            screenshotPreviewContainer.classList.add('hidden');
+            screenshotUploadArea.classList.remove('hidden');
+            paymentScreenshotInput.value = '';
+
+            // 禁用"已完成付款"按钮
+            confirmPaymentBtn.classList.add('btn-disabled');
+        }
+
+        // 初始化图片查看器
+        function initImageViewer() {
+            // 关闭图片查看器
+            closeImageViewer.addEventListener('click', () => {
+                imageViewer.classList.remove('opacity-100', 'pointer-events-auto');
+                imageViewerContent.src = '';
+            });
+
+            // 点击背景关闭
+            imageViewer.addEventListener('click', (e) => {
+                if (e.target === imageViewer) {
+                    imageViewer.classList.remove('opacity-100', 'pointer-events-auto');
+                    imageViewerContent.src = '';
+                }
+            });
+        }
+
+        // 显示图片查看器
+        function showImageViewer(src, alt) {
+            imageViewerContent.src = src;
+            imageViewerContent.alt = alt || '图片预览';
+            imageViewer.classList.add('opacity-100', 'pointer-events-auto');
+        }
+
+        // 显示未付款提示弹窗
+        function showPaymentErrorModal() {
+            paymentErrorModal.classList.add('opacity-100', 'pointer-events-auto');
+            paymentErrorModal.querySelector('div').classList.remove('scale-95');
+            paymentErrorModal.querySelector('div').classList.add('scale-100');
+        }
+
+        // 初始化登录注册相关事件
+        function initAuthEvents() {
+            // 登录按钮
+            loginBtn.addEventListener('click', handleLogin);
+
+            // 显示注册页面
+            showRegisterBtn.addEventListener('click', () => {
+                loginPage.classList.add('hidden');
+                registerPage.classList.remove('hidden');
+                clearAuthForms();
+            });
+
+            // 显示管理员登录页面
+            showAdminLoginBtn.addEventListener('click', () => {
+                loginPage.classList.add('hidden');
+                adminLoginPage.classList.remove('hidden');
+                clearAuthForms();
+            });
+
+            // 注册按钮
+            registerBtn.addEventListener('click', handleRegister);
+
+            // 显示登录页面
+            showLoginBtn.addEventListener('click', () => {
+                registerPage.classList.add('hidden');
+                loginPage.classList.remove('hidden');
+                clearAuthForms();
+            });
+
+            // 管理员登录按钮
+            adminLoginBtn.addEventListener('click', handleAdminLogin);
+
+            // 返回用户登录
+            backToUserLoginBtn.addEventListener('click', () => {
+                adminLoginPage.classList.add('hidden');
+                loginPage.classList.remove('hidden');
+                clearAuthForms();
+            });
+
+            // 手机号输入格式化
+            loginPhone.addEventListener('input', formatPhoneNumber);
+            registerPhone.addEventListener('input', formatPhoneNumber);
+        }
+
+        // 检查是否有已登录用户
+        function checkLoggedInUser() {
+            const loggedInUser = localStorage.getItem('loggedInUser');
+            const userRole = localStorage.getItem('userRole');
+
+            if (loggedInUser && userRole) {
+                // 有已登录用户，自动登录
+                currentUser = loggedInUser;
+                isAdmin = userRole === 'admin';
+                completeLogin();
+            } else {
+                // 没有已登录用户，显示登录页面
+                showAuthPage();
+            }
+        }
+
+        // 处理用户登录
+        function handleLogin() {
+            const phone = loginPhone.value.replace(/\s/g, ''); // 去除空格
+            const password = loginPassword.value;
+
+            // 验证输入
+            if (!isValidPhone(phone)) {
+                showNotification('请输入有效的手机号', 'error');
+                return;
+            }
+
+            if (password.length < 6) {
+                showNotification('密码长度不能少于6位', 'error');
+                return;
+            }
+
+            // 获取用户数据
+            const users = JSON.parse(localStorage.getItem('registeredUsers')) || {};
+            const user = users[phone];
+
+            // 验证用户
+            if (!user || user.password !== password) {
+                showNotification('手机号或密码不正确', 'error');
+                return;
+            }
+
+            // 登录成功
+            currentUser = phone;
+            isAdmin = false;
+            completeLogin();
+        }
+
+        // 处理用户注册
+        function handleRegister() {
+            const phone = registerPhone.value.replace(/\s/g, ''); // 去除空格
+            const password = registerPassword.value;
+            const confirmPwd = confirmPassword.value;
+
+            // 验证输入
+            if (!isValidPhone(phone)) {
+                showNotification('请输入有效的手机号', 'error');
+                return;
+            }
+
+            if (password.length < 6) {
+                showNotification('密码长度不能少于6位', 'error');
+                return;
+            }
+
+            if (password !== confirmPwd) {
+                showNotification('两次输入的密码不一致', 'error');
+                return;
+            }
+
+            // 检查用户是否已注册
+            const users = JSON.parse(localStorage.getItem('registeredUsers')) || {};
+            if (users[phone]) {
+                showNotification('该手机号已注册', 'error');
+                return;
+            }
+
+            // 注册新用户
+            users[phone] = {
+                password: password,
+                registerTime: Date.now()
+            };
+
+            // 保存用户数据
+            localStorage.setItem('registeredUsers', JSON.stringify(users));
+
+            // 注册成功，自动登录
+            currentUser = phone;
+            isAdmin = false;
+            showNotification('注册成功，正在登录...', 'success');
+
+            setTimeout(() => {
+                completeLogin();
+            }, 1000);
+        }
+
+        // 处理管理员登录
+        function handleAdminLogin() {
+            const username = adminUsername.value.trim();
+            const password = adminPassword.value;
+
+            // 验证管理员账号密码
+            if (username !== ADMIN_USERNAME || password !== ADMIN_PASSWORD) {
+                showNotification('管理员账号或密码不正确', 'error');
+                return;
+            }
+
+            // 登录成功
+            currentUser = ADMIN_USERNAME;
+            isAdmin = true;
+            completeLogin();
+        }
+
+        // 完成登录流程
+        function completeLogin() {
+            // 保存登录状态
+            localStorage.setItem('loggedInUser', currentUser);
+            localStorage.setItem('userRole', isAdmin ? 'admin' : 'user');
+
+            // 隐藏登录相关页面，显示主页面
+            loginPage.classList.add('hidden');
+            registerPage.classList.add('hidden');
+            adminLoginPage.classList.add('hidden');
+            navbar.classList.remove('hidden');
+            footer.classList.remove('hidden');
+
+            // 加载系统设置
+            loadSystemSettings();
+
+            // 初始化表格
+            initSpreadsheet();
+
+            // 加载用户数据
+            loadFromLocalStorage();
+
+            // 如果是管理员，加载汇总数据和用户管理数据
+            if (isAdmin) {
+                loadSummaryData();
+                loadUserManagementData();
+            }
+
+            // 更新用户显示和权限
+            updateUserDisplay();
+
+            // 显示默认页面
+            pageContents.forEach(page => {
+                page.classList.add('hidden');
+            });
+            spreadsheetPage.classList.remove('hidden');
+
+            // 更新导航状态
+            navLinks.forEach(l => l.classList.remove('active', 'bg-primary/10', 'text-primary'));
+            document.querySelector('[data-page="spreadsheet-page"]').classList.add('active', 'bg-primary/10', 'text-primary');
+
+            // 显示登录成功提示
+            showNotification(`登录成功，欢迎回来！`, 'success');
+        }
+
+        // 退出登录
+        function logout() {
+            // 清除登录状态
+            localStorage.removeItem('loggedInUser');
+            localStorage.removeItem('userRole');
+
+            // 重置状态
+            currentUser = null;
+            isAdmin = false;
+
+            // 显示登录页面
+            showAuthPage();
+
+            // 隐藏主页面元素
+            navbar.classList.add('hidden');
+            footer.classList.add('hidden');
+
+            // 显示退出提示
+            showNotification('已成功退出登录', 'info');
+        }
+
+        // 显示登录页面
+        function showAuthPage() {
+            pageContents.forEach(page => {
+                page.classList.add('hidden');
+            });
+            loginPage.classList.remove('hidden');
+            clearAuthForms();
+        }
+
+        // 清除登录注册表单
+        function clearAuthForms() {
+            loginPhone.value = '';
+            loginPassword.value = '';
+            registerPhone.value = '';
+            registerPassword.value = '';
+            confirmPassword.value = '';
+            adminUsername.value = '';
+            adminPassword.value = '';
+        }
+
+        // 格式化手机号
+        function formatPhoneNumber(e) {
+            // 去除所有非数字字符
+            let value = e.target.value.replace(/\D/g, '');
+
+            // 限制长度为11位
+            if (value.length > 11) {
+                value = value.slice(0, 11);
+            }
+
+            // 格式化显示
+            if (value.length > 7) {
+                value = value.replace(/(\d{3})(\d{4})(\d{4})/, '$1 $2 $3');
+            } else if (value.length > 3) {
+                value = value.replace(/(\d{3})(\d{1,4})/, '$1 $2');
+            }
+
+            e.target.value = value;
+        }
+
+        // 验证手机号格式
+        function isValidPhone(phone) {
+            // 简单验证：11位数字
+            return /^1\d{10}$/.test(phone);
+        }
+
+        // 初始化表格结构
+        function initSpreadsheet() {
+            spreadsheetBody.innerHTML = '';
+            // 添加一行空数据作为初始行
+            addNewRow();
+        }
+
+        // 添加新行
+        function addNewRow() {
+            const rowIndex = spreadsheetBody.children.length + 1;
+            const tr = document.createElement('tr');
+            tr.dataset.rowIndex = rowIndex;
+            tr.dataset.rowId = Date.now().toString(); // 生成唯一ID
+            tr.className = rowIndex % 2 === 0 ? 'bg-excel-even' : 'bg-excel-odd';
+
+            // 行号单元格
+            const rowHeader = document.createElement('td');
+            rowHeader.className = 'border border-excel-border bg-excel-header font-medium text-gray-600 text-center';
+            rowHeader.textContent = rowIndex;
+            tr.appendChild(rowHeader);
+
+            // 账号单元格
+            const accountCell = createEditableCell('account', '');
+            tr.appendChild(accountCell);
+
+            // 密码单元格
+            const passwordCell = createEditableCell('password', '');
+            tr.appendChild(passwordCell);
+
+            // 公里数单元格 - 特殊处理，用于计算价格
+            const kmCell = document.createElement('td');
+            kmCell.className = 'border border-excel-border px-3 py-1';
+            kmCell.dataset.type = 'km';
+
+            const kmContent = document.createElement('div');
+            kmContent.className = 'min-h-[24px] outline-none';
+            kmContent.contentEditable = true;
+            kmContent.placeholder = '输入数字';
+
+            // 公里数变化时自动计算价格
+            kmContent.addEventListener('input', function(e) {
+                // 只允许输入数字
+                this.textContent = this.textContent.replace(/[^0-9.]/g, '');
+                // 计算价格
+                calculatePrice(tr);
+                // 保存数据
+                scheduleSave();
+            });
+
+            kmCell.appendChild(kmContent);
+            tr.appendChild(kmCell);
+
+            // 价格单元格 - 只读，由系统计算
+            const priceCell = document.createElement('td');
+            priceCell.className = 'border border-excel-border px-3 py-1';
+            priceCell.dataset.type = 'price';
+            priceCell.textContent = '0.00';
+            tr.appendChild(priceCell);
+
+            // 支付状态单元格
+            const statusCell = document.createElement('td');
+            statusCell.className = 'border border-excel-border px-3 py-1';
+            statusCell.dataset.type = 'paymentStatus';
+
+            const statusBadge = document.createElement('span');
+            statusBadge.className = 'inline-block px-2 py-0.5 bg-yellow-100 text-yellow-800 rounded-full text-xs';
+            statusBadge.textContent = '未付款';
+            statusCell.appendChild(statusBadge);
+            tr.appendChild(statusCell);
+
+            // 操作按钮单元格
+            const actionCell = document.createElement('td');
+            actionCell.className = 'border border-excel-border px-3 py-1';
+
+            const payBtn = document.createElement('button');
+            payBtn.className = 'px-2 py-1 bg-primary text-white rounded text-xs mr-1 hover:bg-primary/90 transition-all';
+            payBtn.innerHTML = '<i class="fa fa-money mr-0.5"></i>去支付';
+
+            // 支付按钮事件 - 跳转到支付页面
+            payBtn.addEventListener('click', function() {
+                const price = parseFloat(priceCell.textContent);
+                if (validateRow(tr) && price > 0) {
+                    currentPaymentAmount = price;
+                    currentPaymentRowId = tr.dataset.rowId;
+                    // 重置截图数据
+                    resetScreenshotData();
+                    // 更新支付金额显示
+                    paymentAmount.textContent = `请支付: ¥${price.toFixed(2)}`;
+                    // 复制收款码到支付页面
+                    paymentWechatQrCode.src = wechatQrCode.src;
+                    paymentAlipayQrCode.src = alipayQrCode.src;
+                    // 保存数据（不标记为已支付）
+                    saveToLocalStorage();
+                    // 启动付款计时器
+                    startPaymentTimer();
+                    // 跳转到支付页面
+                    spreadsheetPage.classList.add('hidden');
+                    paymentPage.classList.remove('hidden');
+                }
+            });
+
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'px-2 py-1 bg-red-500 text-white rounded text-xs hover:bg-red-600 transition-all';
+            deleteBtn.innerHTML = '<i class="fa fa-trash mr-0.5"></i>删除';
+
+            // 为删除按钮添加禁用逻辑 - 已付款或已提交凭证的记录不能删除
+            deleteBtn.addEventListener('click', function() {
+                // 检查支付状态
+                const paymentStatus = tr.querySelector('[data-type="paymentStatus"] span').textContent;
+                if (paymentStatus === '已提交凭证' || paymentStatus === '已确认付款') {
+                    showNotification('已提交凭证或已确认的记录不能删除', 'error');
+                    return;
+                }
+
+                if (confirm('确定要删除这条记录吗？')) {
+                    tr.remove();
+                    // 重新编号
+                    renumberRows();
+                    // 保存数据
+                    saveToLocalStorage();
+                }
+            });
+
+            actionCell.appendChild(payBtn);
+            actionCell.appendChild(deleteBtn);
+            tr.appendChild(actionCell);
+
+            spreadsheetBody.appendChild(tr);
+            return tr;
+        }
+
+        // 创建可编辑单元格
+        function createEditableCell(type, value) {
+            const cell = document.createElement('td');
+            cell.className = 'border border-excel-border px-3 py-1';
+            cell.dataset.type = type;
+
+            const content = document.createElement('div');
+            content.className = 'min-h-[24px] outline-none';
+            content.contentEditable = true;
+            content.textContent = value;
+
+            // 内容变化时保存数据
+            content.addEventListener('input', function() {
+                scheduleSave();
+            });
+
+            cell.appendChild(content);
+            return cell;
+        }
+
+        // 计算价格
+        function calculatePrice(row) {
+            const kmCell = row.querySelector('[data-type="km"] div');
+            const priceCell = row.querySelector('[data-type="price"]');
+
+            const km = parseFloat(kmCell.textContent) || 0;
+            const price = km * pricePerKm;
+
+            priceCell.textContent = price.toFixed(2);
+            return price;
+        }
+
+        // 更新所有价格
+        function updateAllPrices() {
+            const rows = spreadsheetBody.querySelectorAll('tr');
+            rows.forEach(row => {
+                calculatePrice(row);
+            });
+
+            // 如果是主账户，更新汇总表中的价格
+            if (isAdmin) {
+                loadSummaryData();
+            }
+        }
+
+        // 标记为已提交付款凭证
+        function markAsPaymentSubmitted(rowId) {
+            const row = spreadsheetBody.querySelector(`tr[data-row-id="${rowId}"]`);
+            if (row) {
+                // 更新状态显示
+                const statusBadge = row.querySelector('[data-type="paymentStatus"] span');
+                statusBadge.className = 'inline-block px-2 py-0.5 bg-blue-100 text-blue-800 rounded-full text-xs';
+                statusBadge.textContent = '已提交凭证';
+
+                // 保存数据（标记为已提交凭证，并保存截图）
+                saveToLocalStorage(true, rowId, currentScreenshotData);
+            }
+        }
+
+        // 主账户确认付款
+        function confirmPaymentByAdmin(userId, rowId) {
+            // 获取所有用户数据
+            const allUserData = JSON.parse(localStorage.getItem('sportsAccountData')) || {};
+
+            // 找到对应的用户和记录
+            if (allUserData[userId]) {
+                const userData = allUserData[userId];
+                const rowIndex = userData.findIndex(row => row.rowId === rowId);
+
+                if (rowIndex !== -1) {
+                    // 更新记录状态为已确认付款
+                    userData[rowIndex].isConfirmed = true;
+                    userData[rowIndex].confirmTime = Date.now();
+
+                    // 保存更新后的数据
+                    localStorage.setItem('sportsAccountData', JSON.stringify(allUserData));
+
+                    // 刷新汇总表
+                    loadSummaryData();
+
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        // 验证行数据是否完整
+        function validateRow(row) {
+            const account = row.querySelector('[data-type="account"] div').textContent.trim();
+            const password = row.querySelector('[data-type="password"] div').textContent.trim();
+            const km = row.querySelector('[data-type="km"] div').textContent.trim();
+
+            if (!account) {
+                showNotification('请填写运动世界账号', 'error');
+                return false;
+            }
+
+            if (!password) {
+                showNotification('请填写密码', 'error');
+                return false;
+            }
+
+            if (!km || isNaN(parseFloat(km)) || parseFloat(km) <= 0) {
+                showNotification('请填写有效的公里数', 'error');
+                return false;
+            }
+
+            return true;
+        }
+
+        // 重新编号行
+        function renumberRows() {
+            const rows = spreadsheetBody.querySelectorAll('tr');
+            rows.forEach((row, index) => {
+                const rowNumber = index + 1;
+                row.dataset.rowIndex = rowNumber;
+                row.querySelector('td:first-child').textContent = rowNumber;
+
+                // 更新行背景色
+                if (rowNumber % 2 === 0) {
+                    row.className = 'bg-excel-even';
+                } else {
+                    row.className = 'bg-excel-odd';
+                }
+            });
+        }
+
+        // 从本地存储加载数据
+        function loadFromLocalStorage() {
+            try {
+                // 清空当前表格
+                spreadsheetBody.innerHTML = '';
+
+                // 获取所有用户数据
+                const allUserData = JSON.parse(localStorage.getItem('sportsAccountData')) || {};
+
+                // 获取当前用户的数据
+                const userData = allUserData[currentUser] || [];
+
+                if (userData.length === 0) {
+                    // 如果没有数据，添加一行空数据
+                    addNewRow();
+                } else {
+                    // 填充用户自己的数据
+                    userData.forEach(rowData => {
+                        const row = addNewRow();
+                        row.dataset.rowId = rowData.rowId; // 恢复唯一ID
+
+                        // 设置支付状态
+                        if (rowData.isConfirmed) {
+                            row.dataset.paymentStatus = 'confirmed';
+                        } else if (rowData.isSubmitted) {
+                            row.dataset.paymentStatus = 'submitted';
+                        } else {
+                            row.dataset.paymentStatus = 'unpaid';
+                        }
+
+                        fillRowData(row, rowData);
+
+                        // 更新状态显示
+                        const statusBadge = row.querySelector('[data-type="paymentStatus"] span');
+                        if (rowData.isConfirmed) {
+                            statusBadge.className = 'inline-block px-2 py-0.5 bg-green-100 text-green-800 rounded-full text-xs';
+                            statusBadge.textContent = '已确认付款';
+                        } else if (rowData.isSubmitted) {
+                            statusBadge.className = 'inline-block px-2 py-0.5 bg-blue-100 text-blue-800 rounded-full text-xs';
+                            statusBadge.textContent = '已提交凭证';
+                        } else {
+                            statusBadge.className = 'inline-block px-2 py-0.5 bg-yellow-100 text-yellow-800 rounded-full text-xs';
+                            statusBadge.textContent = '未付款';
+                        }
+                    });
+                }
+
+                // 更新状态
+                const lastSaved = localStorage.getItem(`lastSaved_${currentUser}`);
+                if (lastSaved) {
+                    tableStatus.textContent = `上次更新: ${new Date(parseInt(lastSaved)).toLocaleString()}`;
+                } else {
+                    tableStatus.textContent = `上次更新: 从未`;
+                }
+                autoSaveIndicator.className = 'save-indicator bg-green-500';
+
+            } catch (e) {
+                console.error('加载数据失败:', e);
+                autoSaveIndicator.className = 'save-indicator bg-red-500';
+                // 添加一行空数据作为备用
+                addNewRow();
+            }
+        }
+
+        // 填充行数据
+        function fillRowData(row, data) {
+            row.querySelector('[data-type="account"] div').textContent = data.account || '';
+            row.querySelector('[data-type="password"] div').textContent = data.password || '';
+            row.querySelector('[data-type="km"] div').textContent = data.km || '';
+
+            // 计算价格
+            calculatePrice(row);
+        }
+
+        // 保存数据到本地存储
+        function saveToLocalStorage(isSubmitted = false, submittedRowId = null, screenshotData = null) {
+            try {
+                // 更新保存指示器状态
+                autoSaveIndicator.className = 'save-indicator bg-yellow-400';
+
+                // 获取所有用户现有数据
+                const allUserData = JSON.parse(localStorage.getItem('sportsAccountData')) || {};
+
+                // 收集当前用户的数据
+                const userData = [];
+                const rows = spreadsheetBody.querySelectorAll('tr');
+
+                rows.forEach(row => {
+                    const rowId = row.dataset.rowId;
+                    const account = row.querySelector('[data-type="account"] div').textContent.trim();
+                    const password = row.querySelector('[data-type="password"] div').textContent.trim();
+                    const km = row.querySelector('[data-type="km"] div').textContent.trim();
+
+                    // 只保存有内容的行
+                    if (account || password || km) {
+                        // 检查是否是当前提交的行
+                        const isCurrentSubmittedRow = rowId === submittedRowId && isSubmitted;
+
+                        // 检查是否已有状态
+                        let existingRowData = null;
+                        if (allUserData[currentUser]) {
+                            existingRowData = allUserData[currentUser].find(r => r.rowId === rowId);
+                        }
+
+                        const rowData = {
+                            rowId,
+                            account,
+                            password,
+                            km,
+                            price: (parseFloat(km) * pricePerKm).toFixed(2),
+                            // 保留原有状态或更新为新状态
+                            isSubmitted: isCurrentSubmittedRow ? true : (existingRowData ? existingRowData.isSubmitted : false),
+                            isConfirmed: existingRowData ? existingRowData.isConfirmed : false
+                        };
+
+                        // 如果是提交付款凭证，保存截图和提交时间
+                        if (isCurrentSubmittedRow) {
+                            rowData.screenshot = screenshotData;
+                            rowData.submitTime = Date.now();
+                        }
+                        // 如果已有截图，保留截图数据
+                        else if (existingRowData && existingRowData.screenshot) {
+                            rowData.screenshot = existingRowData.screenshot;
+                            rowData.submitTime = existingRowData.submitTime;
+                        }
+
+                        // 如果已有确认时间，保留
+                        if (existingRowData && existingRowData.confirmTime) {
+                            rowData.confirmTime = existingRowData.confirmTime;
+                        }
+
+                        userData.push(rowData);
+                    }
+                });
+
+                // 保存当前用户数据
+                allUserData[currentUser] = userData;
+                localStorage.setItem('sportsAccountData', JSON.stringify(allUserData));
+
+                // 记录保存时间
+                const now = Date.now();
+                localStorage.setItem(`lastSaved_${currentUser}`, now.toString());
+                tableStatus.textContent = `上次更新: ${new Date(now).toLocaleString()}`;
+
+                // 更新保存指示器状态为成功
+                autoSaveIndicator.className = 'save-indicator bg-green-500';
+
+            } catch (e) {
+                console.error('保存数据失败:', e);
+                autoSaveIndicator.className = 'save-indicator bg-red-500';
+            }
+        }
+
+        // 安排延迟保存
+        function scheduleSave() {
+            clearTimeout(window.saveTimeout);
+            window.saveTimeout = setTimeout(saveToLocalStorage, 1000);
+        }
+
+        // 加载汇总数据（主账户）
+        function loadSummaryData() {
+            try {
+                // 清空汇总表格
+                summaryTableBody.innerHTML = '';
+
+                // 获取所有用户数据
+                const allUserData = JSON.parse(localStorage.getItem('sportsAccountData')) || {};
+                const registeredUsers = JSON.parse(localStorage.getItem('registeredUsers')) || {};
+
+                let recordIndex = 1;
+                let totalAmount = 0;
+                let userCount = 0;
+                let recordCount = 0;
+                const usersWithData = new Set();
+
+                // 遍历所有注册用户
+                Object.keys(registeredUsers).forEach(userId => {
+                    const userData = allUserData[userId] || [];
+                    let userHasData = false;
+
+                    // 为每个用户添加已提交或已确认的数据行
+                    userData.forEach(rowData => {
+                        if (rowData.isSubmitted || rowData.isConfirmed) {
+                            if (!userHasData) {
+                                userHasData = true;
+                                usersWithData.add(userId);
+                            }
+
+                            recordCount++; // 统计总记录数
+
+                            const tr = document.createElement('tr');
+                            tr.dataset.userId = userId;
+                            tr.dataset.rowId = rowData.rowId;
+                            tr.className = recordIndex % 2 === 0 ? 'bg-excel-even' : 'bg-excel-odd';
+
+                            // 行号
+                            const indexCell = document.createElement('td');
+                            indexCell.className = 'border border-excel-border px-3 py-1 text-center';
+                            indexCell.textContent = recordIndex;
+                            tr.appendChild(indexCell);
+
+                            // 用户名(手机号)
+                            const userCell = document.createElement('td');
+                            userCell.className = 'border border-excel-border px-3 py-1';
+                            userCell.textContent = formatPhoneDisplay(userId);
+                            tr.appendChild(userCell);
+
+                            // 账号
+                            const accountCell = document.createElement('td');
+                            accountCell.className = 'border border-excel-border px-3 py-1';
+                            accountCell.textContent = rowData.account || '';
+                            tr.appendChild(accountCell);
+
+                            // 密码
+                            const passwordCell = document.createElement('td');
+                            passwordCell.className = 'border border-excel-border px-3 py-1';
+                            passwordCell.textContent = rowData.password || '';
+                            tr.appendChild(passwordCell);
+
+                            // 公里数
+                            const kmCell = document.createElement('td');
+                            kmCell.className = 'border border-excel-border px-3 py-1';
+                            kmCell.textContent = rowData.km || '';
+                            tr.appendChild(kmCell);
+
+                            // 价格
+                            const priceCell = document.createElement('td');
+                            priceCell.className = 'border border-excel-border px-3 py-1';
+                            const price = parseFloat(rowData.price) || 0;
+                            priceCell.textContent = price.toFixed(2);
+                            tr.appendChild(priceCell);
+
+                            // 累计已确认金额
+                            if (rowData.isConfirmed) {
+                                totalAmount += price;
+                            }
+
+                            // 提交时间
+                            const timeCell = document.createElement('td');
+                            timeCell.className = 'border border-excel-border px-3 py-1';
+                            if (rowData.submitTime) {
+                                timeCell.textContent = new Date(parseInt(rowData.submitTime)).toLocaleString();
+                            } else {
+                                timeCell.textContent = '未知';
+                            }
+                            tr.appendChild(timeCell);
+
+                            // 支付凭证
+                            const screenshotCell = document.createElement('td');
+                            screenshotCell.className = 'border border-excel-border px-3 py-1';
+
+                            if (rowData.screenshot) {
+                                const viewBtn = document.createElement('button');
+                                viewBtn.className = 'px-2 py-0.5 bg-primary/10 text-primary rounded text-xs hover:bg-primary/20 transition-all';
+                                viewBtn.innerHTML = '<i class="fa fa-eye mr-0.5"></i>查看凭证';
+                                viewBtn.addEventListener('click', () => {
+                                    showImageViewer(rowData.screenshot, '付款凭证截图');
+                                });
+                                screenshotCell.appendChild(viewBtn);
+                            } else {
+                                screenshotCell.textContent = '无';
+                            }
+                            tr.appendChild(screenshotCell);
+
+                            // 状态
+                            const statusCell = document.createElement('td');
+                            statusCell.className = 'border border-excel-border px-3 py-1';
+
+                            const statusBadge = document.createElement('span');
+                            if (rowData.isConfirmed) {
+                                statusBadge.className = 'inline-block px-2 py-0.5 bg-green-100 text-green-800 rounded-full text-xs';
+                                statusBadge.textContent = '已确认付款';
+                            } else {
+                                statusBadge.className = 'inline-block px-2 py-0.5 bg-blue-100 text-blue-800 rounded-full text-xs';
+                                statusBadge.textContent = '待确认';
+                            }
+                            statusCell.appendChild(statusBadge);
+                            tr.appendChild(statusCell);
+
+                            // 操作
+                            const actionCell = document.createElement('td');
+                            actionCell.className = 'border border-excel-border px-3 py-1';
+
+                            if (!rowData.isConfirmed) {
+                                // 确认付款按钮
+                                const confirmBtn = document.createElement('button');
+                                confirmBtn.className = 'px-2 py-0.5 bg-green-600 text-white rounded text-xs mr-1 hover:bg-green-700 transition-all';
+                                confirmBtn.innerHTML = '<i class="fa fa-check mr-0.5"></i>确认付款';
+
+                                confirmBtn.addEventListener('click', function() {
+                                    if (confirm('确认该用户已付款？')) {
+                                        if (confirmPaymentByAdmin(userId, rowData.rowId)) {
+                                            showNotification('已确认付款', 'success');
+                                        } else {
+                                            showNotification('操作失败，请重试', 'error');
+                                        }
+                                    }
+                                });
+
+                                actionCell.appendChild(confirmBtn);
+                            }
+
+                            // 删除按钮
+                            const deleteBtn = document.createElement('button');
+                            deleteBtn.className = 'px-2 py-0.5 bg-red-500 text-white rounded text-xs hover:bg-red-600 transition-all';
+                            deleteBtn.innerHTML = '<i class="fa fa-trash mr-0.5"></i>删除';
+
+                            deleteBtn.addEventListener('click', function() {
+                                if (confirm('确定要删除这条记录吗？')) {
+                                    // 从用户数据中删除
+                                    if (allUserData[userId]) {
+                                        allUserData[userId] = allUserData[userId].filter(r => r.rowId !== rowData.rowId);
+                                        localStorage.setItem('sportsAccountData', JSON.stringify(allUserData));
+                                    }
+
+                                    // 从表格中删除
+                                    tr.remove();
+
+                                    // 重新加载汇总数据
+                                    loadSummaryData();
+
+                                    showNotification('记录已删除', 'success');
+                                }
+                            });
+
+                            actionCell.appendChild(deleteBtn);
+                            tr.appendChild(actionCell);
+
+                            summaryTableBody.appendChild(tr);
+                            recordIndex++;
+                        }
+                    });
+                });
+
+                // 更新统计信息
+                totalUsersElement.textContent = usersWithData.size;
+                totalRecordsElement.textContent = recordCount;
+                totalAmountElement.textContent = totalAmount.toFixed(2);
+
+            } catch (e) {
+                console.error('加载汇总数据失败:', e);
+            }
+        }
+
+        // 加载用户管理数据（主账户）
+        function loadUserManagementData() {
+            try {
+                // 清空用户管理表格
+                userManagementTableBody.innerHTML = '';
+
+                // 获取所有注册用户
+                const registeredUsers = JSON.parse(localStorage.getItem('registeredUsers')) || {};
+                const allUserData = JSON.parse(localStorage.getItem('sportsAccountData')) || {};
+
+                let userIndex = 1;
+
+                // 遍历所有注册用户
+                Object.keys(registeredUsers).forEach(phone => {
+                    const user = registeredUsers[phone];
+                    const userData = allUserData[phone] || [];
+                    const submittedRecordCount = userData.filter(row => row.isSubmitted || row.isConfirmed).length;
+
+                    const tr = document.createElement('tr');
+                    tr.dataset.phone = phone;
+                    tr.className = userIndex % 2 === 0 ? 'bg-excel-even' : 'bg-excel-odd';
+
+                    // 行号
+                    const indexCell = document.createElement('td');
+                    indexCell.className = 'border border-excel-border px-3 py-1 text-center';
+                    indexCell.textContent = userIndex;
+                    tr.appendChild(indexCell);
+
+                    // 手机号
+                    const phoneCell = document.createElement('td');
+                    phoneCell.className = 'border border-excel-border px-3 py-1';
+                    phoneCell.textContent = formatPhoneDisplay(phone);
+                    tr.appendChild(phoneCell);
+
+                    // 注册时间
+                    const timeCell = document.createElement('td');
+                    timeCell.className = 'border border-excel-border px-3 py-1';
+                    timeCell.textContent = new Date(parseInt(user.registerTime)).toLocaleString();
+                    tr.appendChild(timeCell);
+
+                    // 已提交记录数
+                    const recordCountCell = document.createElement('td');
+                    recordCountCell.className = 'border border-excel-border px-3 py-1';
+                    recordCountCell.textContent = submittedRecordCount;
+                    tr.appendChild(recordCountCell);
+
+                    // 操作
+                    const actionCell = document.createElement('td');
+                    actionCell.className = 'border border-excel-border px-3 py-1';
+
+                    const viewBtn = document.createElement('button');
+                    viewBtn.className = 'px-2 py-1 bg-primary text-white rounded text-xs mr-1 hover:bg-primary/90 transition-all';
+                    viewBtn.innerHTML = '<i class="fa fa-eye mr-0.5"></i>查看';
+
+                    viewBtn.addEventListener('click', () => {
+                        // 切换到表格页面并加载该用户的数据
+                        pageContents.forEach(page => {
+                            page.classList.add('hidden');
+                        });
+                        spreadsheetPage.classList.remove('hidden');
+
+                        // 更新导航状态
+                        navLinks.forEach(l => l.classList.remove('active', 'bg-primary/10', 'text-primary'));
+                        document.querySelector('[data-page="spreadsheet-page"]').classList.add('active', 'bg-primary/10', 'text-primary');
+
+                        // 临时保存当前用户数据
+                        const tempCurrentUser = currentUser;
+                        currentUser = phone;
+
+                        // 加载选中用户的数据
+                        initSpreadsheet();
+                        loadFromLocalStorage();
+
+                        // 恢复当前用户
+                        currentUser = tempCurrentUser;
+                    });
+
+                    const deleteBtn = document.createElement('button');
+                    deleteBtn.className = 'px-2 py-1 bg-red-500 text-white rounded text-xs hover:bg-red-600 transition-all';
+                    deleteBtn.innerHTML = '<i class="fa fa-trash mr-0.5"></i>删除';
+
+                    deleteBtn.addEventListener('click', function() {
+                        if (confirm('确定要删除这个用户及其所有数据吗？此操作不可恢复！')) {
+                            // 从注册用户中删除
+                            delete registeredUsers[phone];
+                            localStorage.setItem('registeredUsers', JSON.stringify(registeredUsers));
+
+                            // 从用户数据中删除
+                            delete allUserData[phone];
+                            localStorage.setItem('sportsAccountData', JSON.stringify(allUserData));
+
+                            // 从表格中删除
+                            tr.remove();
+
+                            // 重新加载用户管理数据和汇总数据
+                            loadUserManagementData();
+                            loadSummaryData();
+
+                            showNotification('用户已删除', 'success');
+                        }
+                    });
+
+                    actionCell.appendChild(viewBtn);
+                    actionCell.appendChild(deleteBtn);
+                    tr.appendChild(actionCell);
+
+                    userManagementTableBody.appendChild(tr);
+                    userIndex++;
+                });
+
+            } catch (e) {
+                console.error('加载用户管理数据失败:', e);
+            }
+        }
+
+        // 初始化收款码上传功能
+        function initQrCodeUpload() {
+            // 微信收款码上传
+            wechatUploadBtn.addEventListener('click', () => {
+                wechatQrInput.click();
+            });
+
+            wechatQrContainer.addEventListener('click', () => {
+                if (isAdmin) {
+                    wechatQrInput.click();
+                }
+            });
+
+            wechatQrInput.addEventListener('change', (e) => {
+                handleQrCodeUpload(e, wechatQrCode, 'wechat');
+            });
+
+            // 支付宝收款码上传
+            alipayUploadBtn.addEventListener('click', () => {
+                alipayQrInput.click();
+            });
+
+            alipayQrContainer.addEventListener('click', () => {
+                if (isAdmin) {
+                    alipayQrInput.click();
+                }
+            });
+
+            alipayQrInput.addEventListener('change', (e) => {
+                handleQrCodeUpload(e, alipayQrCode, 'alipay');
+            });
+
+            // 二维码放大功能
+            document.querySelectorAll('.qr-zoom-trigger').forEach(trigger => {
+                trigger.addEventListener('click', function() {
+                    const qrType = this.getAttribute('data-qr');
+                    if (qrType === 'wechat') {
+                        showImageViewer(paymentWechatQrCode.src, '微信支付二维码');
+                    } else if (qrType === 'alipay') {
+                        showImageViewer(paymentAlipayQrCode.src, '支付宝二维码');
+                    }
+                });
+            });
+        }
+
+        // 处理收款码上传并保存到本地存储
+        function handleQrCodeUpload(event, imageElement, type) {
+            // 只有管理员可以上传
+            if (!isAdmin) return;
+
+            const file = event.target.files[0];
+            if (!file) return;
+
+            // 检查文件类型是否为图片
+            if (!file.type.startsWith('image/')) {
+                showNotification('请选择图片文件', 'error');
+                return;
+            }
+
+            // 读取本地文件并显示
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                // 更新图片显示
+                imageElement.src = e.target.result;
+
+                // 同时更新支付页面的收款码
+                if (type === 'wechat') {
+                    paymentWechatQrCode.src = e.target.result;
+                } else {
+                    paymentAlipayQrCode.src = e.target.result;
+                }
+
+                // 保存到系统设置
+                saveSystemSettings();
+
+                // 显示上传成功的提示
+                showNotification('收款码更新成功！', 'success');
+            };
+
+            // 读取文件并转换为DataURL
+            reader.readAsDataURL(file);
+        }
+
+        // 加载系统设置（收款码、价格等）
+        function loadSystemSettings() {
+            try {
+                const systemSettings = JSON.parse(localStorage.getItem('sportsSystemSettings')) || {};
+
+                // 加载收款码
+                if (systemSettings.wechatQrCode) {
+                    wechatQrCode.src = systemSettings.wechatQrCode;
+                    paymentWechatQrCode.src = systemSettings.wechatQrCode;
+                }
+
+                if (systemSettings.alipayQrCode) {
+                    alipayQrCode.src = systemSettings.alipayQrCode;
+                    paymentAlipayQrCode.src = systemSettings.alipayQrCode;
+                }
+
+                // 加载价格设置
+                if (systemSettings.pricePerKm) {
+                    pricePerKm = parseFloat(systemSettings.pricePerKm);
+                }
+
+                // 更新价格显示
+                pricePerKmInput.value = pricePerKm;
+                pricePerKmDisplay.textContent = pricePerKm.toFixed(2);
+
+            } catch (e) {
+                console.error('加载系统设置失败:', e);
+            }
+        }
+
+        // 保存系统设置
+        function saveSystemSettings() {
+            try {
+                const systemSettings = {
+                    wechatQrCode: wechatQrCode.src,
+                    alipayQrCode: alipayQrCode.src,
+                    pricePerKm: pricePerKm
+                };
+
+                localStorage.setItem('sportsSystemSettings', JSON.stringify(systemSettings));
+
+            } catch (e) {
+                console.error('保存系统设置失败:', e);
+            }
+        }
+
+        // 更新用户显示和权限
+        function updateUserDisplay() {
+            // 更新用户标签
+            if (isAdmin) {
+                currentUserDisplay.textContent = '主账户';
+                adminBadge.classList.remove('hidden');
+                // 显示管理员专用菜单
+                paymentSettingsLink.classList.remove('hidden');
+                summaryLink.classList.remove('hidden');
+                userManagementLink.classList.remove('hidden');
+                mobilePaymentSettingsLink.classList.remove('hidden');
+                mobileSummaryLink.classList.remove('hidden');
+                mobileUserManagementLink.classList.remove('hidden');
+            } else {
+                currentUserDisplay.textContent = formatPhoneDisplay(currentUser);
+                adminBadge.classList.add('hidden');
+                // 隐藏管理员专用菜单
+                paymentSettingsLink.classList.add('hidden');
+                summaryLink.classList.add('hidden');
+                userManagementLink.classList.add('hidden');
+                mobilePaymentSettingsLink.classList.add('hidden');
+                mobileSummaryLink.classList.add('hidden');
+                mobileUserManagementLink.classList.add('hidden');
+            }
+        }
+
+        // 显示通知提示
+        function showNotification(message, type = 'info') {
+            // 设置通知内容
+            notificationText.textContent = message;
+
+            // 设置通知图标和颜色
+            notification.className = 'fixed bottom-5 right-5 text-white px-4 py-3 rounded-lg shadow-lg transform translate-y-20 opacity-0 transition-all duration-300 flex items-center z-50';
+
+            if (type === 'success') {
+                notification.classList.add('bg-green-600');
+                notificationIcon.className = 'fa fa-check-circle mr-2';
+            } else if (type === 'error') {
+                notification.classList.add('bg-red-600');
+                notificationIcon.className = 'fa fa-exclamation-circle mr-2';
+            } else {
+                notification.classList.add('bg-gray-800');
+                notificationIcon.className = 'fa fa-info-circle mr-2';
+            }
+
+            // 显示通知
+            setTimeout(() => {
+                notification.classList.remove('translate-y-20', 'opacity-0');
+            }, 10);
+
+            // 3秒后隐藏通知
+            setTimeout(() => {
+                notification.classList.add('translate-y-20', 'opacity-0');
+            }, 3000);
+        }
+
+        // 格式化手机号显示（中间四位用*代替）
+        function formatPhoneDisplay(phone) {
+            if (!phone || phone.length !== 11) return phone;
+            return phone.substr(0, 3) + ' **** ' + phone.substr(7);
+        }
+
+        // 启动付款计时器
+        function startPaymentTimer() {
+            // 清除之前的计时器
+            clearPaymentTimer();
+
+            let seconds = PAYMENT_TIMEOUT;
+
+            // 更新计时器显示
+            updateTimerDisplay(seconds);
+
+            // 设置新计时器
+            paymentTimer = setInterval(() => {
+                seconds--;
+                updateTimerDisplay(seconds);
+
+                // 超时处理
+                if (seconds <= 0) {
+                    clearPaymentTimer();
+                    handlePaymentTimeout();
+                }
+            }, 1000);
+        }
+
+        // 清除付款计时器
+        function clearPaymentTimer() {
+            if (paymentTimer) {
+                clearInterval(paymentTimer);
+                paymentTimer = null;
+            }
+        }
+
+        // 更新计时器显示
+        function updateTimerDisplay(seconds) {
+            const minutes = Math.floor(seconds / 60);
+            const remainingSeconds = seconds % 60;
+            paymentTimerElement.textContent = `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+        }
+
+        // 处理付款超时
+        function handlePaymentTimeout() {
+            // 找到当前正在支付的行并删除
+            if (currentPaymentRowId) {
+                const row = spreadsheetBody.querySelector(`tr[data-row-id="${currentPaymentRowId}"]`);
+                if (row) {
+                    row.remove();
+                    renumberRows();
+                    saveToLocalStorage();
+                }
+            }
+
+            // 返回表格页面
+            paymentPage.classList.add('hidden');
+            spreadsheetPage.classList.remove('hidden');
+
+            // 重置截图数据
+            resetScreenshotData();
+
+            // 显示超时提示
+            showNotification('付款超时，未付款的记录已自动删除', 'error');
+
+            // 重置当前支付信息
+            currentPaymentRowId = null;
+            currentPaymentAmount = 0;
+        }
+    </script>
+</body>
+</html>
+    
